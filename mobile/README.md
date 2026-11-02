@@ -34,8 +34,13 @@ mobile/
 
 ## Требования
 
-- Flutter 3.24+ (Dart 3.3+), Android SDK;
+- Flutter 3.47+ (Dart 3.13+), Android SDK 36, JDK 17;
 - запущенный backend (см. `../backend/README.md`).
+
+Проверено на Flutter 3.47.9, Android 16 (arm64).
+
+На OnePlus Pad 2 Pro проверены вход, меню, корзина, оформление заказа,
+оплата, экран статуса и автоматическое обновление статуса (опрос каждые 10 с).
 
 ## Первый запуск
 
@@ -91,6 +96,39 @@ flutter build apk --release \
 ```
 
 APK: `build/app/outputs/flutter-apk/app-release.apk`.
+
+### Установка на подключённый планшет
+
+```bash
+adb devices
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+adb shell am start -n com.example.fastfood_mobile/.MainActivity
+```
+
+Планшет и компьютер должны быть в одной сети, а API — слушать `0.0.0.0:5080`.
+Для проверки с планшета:
+
+```bash
+adb shell curl -s http://192.168.1.50:5080/api/v1/health
+```
+
+### Проверка без устройства
+
+```bash
+flutter analyze
+flutter test
+```
+
+На машине с небольшим объёмом ОЗУ (до 8 ГБ) шаблон Gradle может запросить
+слишком много памяти. В `android/gradle.properties` уменьшите:
+
+```properties
+org.gradle.jvmargs=-Xmx2G -XX:MaxMetaspaceSize=1G
+```
+
+Первая сборка скачивает Gradle, Android NDK 28.2 и зависимости (около
+2–2,5 ГБ), поэтому может занять 10–30 минут; повторные сборки идут
+значительно быстрее.
 
 ## Демо-доступ
 

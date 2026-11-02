@@ -74,7 +74,8 @@ class _MenuScreenState extends State<MenuScreen> {
   List<MenuItem> get _visible {
     return _items.where((item) {
       final byCategory = _category == 'Все' || item.category == _category;
-      final byQuery = _query.isEmpty ||
+      final byQuery =
+          _query.isEmpty ||
           item.name.toLowerCase().contains(_query) ||
           item.description.toLowerCase().contains(_query);
       return byCategory && byQuery;
@@ -132,7 +133,10 @@ class _MenuScreenState extends State<MenuScreen> {
               ),
               const SizedBox(height: 18),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF0F1F4),
                   borderRadius: BorderRadius.circular(20),
@@ -225,9 +229,8 @@ class _MenuScreenState extends State<MenuScreen> {
         actions: [
           IconButton(
             tooltip: 'Корзина',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const CartScreen()),
-            ),
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const CartScreen())),
             icon: Badge(
               isLabelVisible: cart.count > 0,
               label: Text('${cart.count}'),
@@ -240,9 +243,8 @@ class _MenuScreenState extends State<MenuScreen> {
       floatingActionButton: cart.isEmpty
           ? null
           : FloatingActionButton.extended(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const CartScreen()),
-              ),
+              onPressed: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const CartScreen())),
               backgroundColor: ink,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.shopping_bag_outlined),
@@ -251,83 +253,83 @@ class _MenuScreenState extends State<MenuScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _ErrorView(message: _error!, onRetry: _load)
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(20, 6, 20, 110),
-                    children: [
-                      _hero(),
-                      const SizedBox(height: 18),
-                      TextField(
-                        controller: _search,
-                        onChanged: (value) =>
-                            setState(() => _query = value.trim().toLowerCase()),
-                        decoration: const InputDecoration(
-                          hintText: 'Найти блюдо',
-                          prefixIcon: Icon(Icons.search, color: mutedInk),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      SizedBox(
-                        height: 42,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _categories.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
-                          itemBuilder: (context, index) {
-                            final category = _categories[index];
-                            final selected = category == _category;
-                            return ChoiceChip(
-                              label: Text(category),
-                              selected: selected,
-                              showCheckmark: false,
-                              onSelected: (_) =>
-                                  setState(() => _category = category),
-                              selectedColor: ink,
-                              backgroundColor: Colors.white,
-                              side: const BorderSide(color: lineColor),
-                              labelStyle: TextStyle(
-                                color: selected ? Colors.white : mutedInk,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 13,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (_visible.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 48),
-                          child: Center(
-                            child: Text(
-                              'Ничего не нашлось',
-                              style: TextStyle(color: mutedInk),
-                            ),
+          ? _ErrorView(message: _error!, onRetry: _load)
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 110),
+                children: [
+                  _hero(),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: _search,
+                    onChanged: (value) =>
+                        setState(() => _query = value.trim().toLowerCase()),
+                    decoration: const InputDecoration(
+                      hintText: 'Найти блюдо',
+                      prefixIcon: Icon(Icons.search, color: mutedInk),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 42,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _categories.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final category = _categories[index];
+                        final selected = category == _category;
+                        return ChoiceChip(
+                          label: Text(category),
+                          selected: selected,
+                          showCheckmark: false,
+                          onSelected: (_) =>
+                              setState(() => _category = category),
+                          selectedColor: ink,
+                          backgroundColor: Colors.white,
+                          side: const BorderSide(color: lineColor),
+                          labelStyle: TextStyle(
+                            color: selected ? Colors.white : mutedInk,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
                           ),
-                        )
-                      else
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _visible.length,
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_visible.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 48),
+                      child: Center(
+                        child: Text(
+                          'Ничего не нашлось',
+                          style: TextStyle(color: mutedInk),
+                        ),
+                      ),
+                    )
+                  else
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _visible.length,
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 280,
+                            mainAxisExtent: 224,
                             mainAxisSpacing: 12,
                             crossAxisSpacing: 12,
-                            childAspectRatio: 0.74,
                           ),
-                          itemBuilder: (context, index) {
-                            final item = _visible[index];
-                            return _dishCard(item);
-                          },
-                        ),
-                    ],
-                  ),
-                ),
+                      itemBuilder: (context, index) {
+                        final item = _visible[index];
+                        return _dishCard(item);
+                      },
+                    ),
+                ],
+              ),
+            ),
     );
   }
 
@@ -349,8 +351,10 @@ class _MenuScreenState extends State<MenuScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),

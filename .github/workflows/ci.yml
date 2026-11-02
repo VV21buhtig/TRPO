@@ -74,13 +74,19 @@ jobs:
           flutter create --platforms=android --project-name fastfood_mobile /tmp/mobile_app
           rm -rf /tmp/mobile_app/lib
           cp -r mobile/lib /tmp/mobile_app/lib
+          rm -rf /tmp/mobile_app/test
+          cp -r mobile/test /tmp/mobile_app/test
           cp mobile/pubspec.yaml mobile/analysis_options.yaml /tmp/mobile_app/
       - name: Analyze
         working-directory: /tmp/mobile_app
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Test
+        working-directory: /tmp/mobile_app
+        run: flutter test
       - name: Build debug APK
         working-directory: /tmp/mobile_app
         run: |
-          flutter pub get
           flutter build apk --debug \
             --dart-define=API_BASE=http://10.0.2.2:5080/api/v1

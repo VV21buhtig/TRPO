@@ -149,6 +149,7 @@ class ProfileScreen extends StatelessWidget {
     );
 
     if (name == null || name.isEmpty) return;
+    if (!context.mounted) return;
 
     try {
       final updated = await context.read<ApiClient>().updateProfile(name);

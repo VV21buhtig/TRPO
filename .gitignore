@@ -13,6 +13,7 @@
 # Flutter
 mobile/.dart_tool/
 mobile/build/
+*.apk
 mobile/.flutter-plugins
 mobile/.flutter-plugins-dependencies
 mobile/ios/

@@ -115,6 +115,10 @@ SMS-вход в демо-режиме: код `0000`.
 | --- | --- |
 | ![Статус](docs/screenshots/web-success.png) | ![Мобильная вёрстка](docs/screenshots/web-mobile.png) |
 
+| Mobile — меню (планшет) | Mobile — статус заказа |
+| --- | --- |
+| ![Меню](docs/screenshots/mobile-tablet-menu.png) | ![Статус](docs/screenshots/mobile-tablet-status.png) |
+
 ## REST API
 
 Базовый префикс — `/api/v1`, формат — JSON. Защищённые методы требуют
@@ -172,7 +176,7 @@ docker compose up --build
 1. **Backend** — сборка .NET, запуск API и smoke-тест (`smoke_test.py`);
 2. **Web** — `npm ci` и production-сборка SPA;
 3. **Desktop** — проверка типов TypeScript и сборка Electron-приложения;
-4. **Mobile** — генерация Android-обвязки, `flutter analyze` и debug APK.
+4. **Mobile** — генерация Android-обвязки, `flutter analyze`, `flutter test` и debug APK.
 
 ## Соответствие архитектуре из ЛР9
 
