@@ -13,7 +13,7 @@ real-time через SignalR.
 | Backend | ASP.NET Core (.NET 10), EF Core, SQLite/PostgreSQL, JWT, SignalR | `backend/` | единый REST API, бизнес-логика, real-time |
 | Web | React 19 + TypeScript + Vite | `web/` | клиентский SPA: меню, корзина, оплата, история |
 | Desktop | Electron + TypeScript | `desktop/` | рабочее место оператора: доска заказов, стоп-лист |
-| Mobile | Flutter (Dart) → Android | `mobile/` | мобильный клиент: те же сценарии, что в вебе |
+| Mobile | Flutter (Dart) → Android | `mobile/` | мобильный клиент: те же сценарии; проверен на планшете Android 16 |
 | Infra | Docker Compose, Nginx, PostgreSQL 16, Redis 7 | `infra/` | развёртывание комплекса |
 | CI | GitHub Actions | `.github/workflows/ci.yml` | сборка, анализ и smoke-тесты всех компонентов |
 
