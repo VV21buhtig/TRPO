@@ -1,0 +1,29 @@
+# Node
+**/node_modules/
+**/dist/
+**/.vite/
+
+# .NET
+**/bin/
+**/obj/
+*.db
+*.db-shm
+*.db-wal
+
+# Flutter
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/ios/
+mobile/linux/
+mobile/macos/
+mobile/windows/
+mobile/web/
+
+# Окружение и IDE
+.env
+.idea/
+.vscode/
+*.log
+.DS_Store

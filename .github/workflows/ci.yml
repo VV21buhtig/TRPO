@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Build
+        run: dotnet build backend/FastFood.Api/FastFood.Api.csproj -c Release
+      - name: Smoke test REST API
+        working-directory: backend
+        run: |
+          dotnet run --project FastFood.Api -c Release --no-build \
+            --urls http://127.0.0.1:5080 > /tmp/api.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -sf http://127.0.0.1:5080/api/v1/health && break
+            sleep 2
+          done
+          python3 smoke_test.py
+
+  web:
+    name: Web (React + TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  desktop:
+    name: Desktop (Electron + TypeScript)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+  mobile:
+    name: Mobile (Flutter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Собрать проект с платформенной обвязкой
+        run: |
+          flutter create --platforms=android --project-name fastfood_mobile /tmp/mobile_app
+          rm -rf /tmp/mobile_app/lib
+          cp -r mobile/lib /tmp/mobile_app/lib
+          cp mobile/pubspec.yaml mobile/analysis_options.yaml /tmp/mobile_app/
+      - name: Analyze
+        working-directory: /tmp/mobile_app
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: Build debug APK
+        working-directory: /tmp/mobile_app
+        run: |
+          flutter pub get
+          flutter build apk --debug \
+            --dart-define=API_BASE=http://10.0.2.2:5080/api/v1
