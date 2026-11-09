@@ -110,11 +110,21 @@ export function MenuPage() {
               <div className="dish-body">
                 <h3>{item.name}</h3>
                 <p className="muted small">{item.description}</p>
+                {item.promotionTitle && (
+                  <span className="promo-badge">
+                    {item.promotionTitle} · −{item.discountPercent}%
+                  </span>
+                )}
                 <div className="dish-meta">
                   <span className="muted small">{item.calories} ккал</span>
                 </div>
                 <div className="dish-footer">
-                  <span className="price">{money(item.price)}</span>
+                  <span className="price">
+                    {money(item.price)}
+                    {!!item.discountPercent && (
+                      <span className="price-old">{money(item.basePrice ?? item.price)}</span>
+                    )}
+                  </span>
                   <button
                     type="button"
                     className="primary small"
@@ -165,9 +175,19 @@ export function MenuPage() {
               <span className="tag">{selected.category}</span>
               <h2>{selected.name}</h2>
               <p className="muted">{selected.description}</p>
+              {selected.promotionTitle && (
+                <span className="promo-badge">
+                  {selected.promotionTitle} · −{selected.discountPercent}%
+                </span>
+              )}
               <p className="muted small">{selected.calories} ккал</p>
               <div className="modal-footer">
-                <span className="price big">{money(selected.price)}</span>
+                <span className="price big">
+                  {money(selected.price)}
+                  {!!selected.discountPercent && (
+                    <span className="price-old">{money(selected.basePrice ?? selected.price)}</span>
+                  )}
+                </span>
                 <button
                   type="button"
                   className="primary"

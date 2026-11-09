@@ -7,6 +7,16 @@ public static class Roles
     public const string Admin = "Administrator";
 }
 
+public static class PromotionScopes
+{
+    public const string None = "None";
+    public const string All = "All";
+    public const string Category = "Category";
+    public const string MenuItem = "MenuItem";
+
+    public static readonly string[] AllScopes = [None, All, Category, MenuItem];
+}
+
 public static class OrderStatuses
 {
     public const string New = "New";
@@ -27,6 +37,7 @@ public class User
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = Roles.Customer;
     public int BonusBalance { get; set; }
+    public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -54,7 +65,22 @@ public class Order
     public string? Comment { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public List<OrderItem> Items { get; set; } = [];
+    public List<OrderStatusHistory> StatusHistory { get; set; } = [];
     public Payment? Payment { get; set; }
+}
+
+public class OrderStatusHistory
+{
+    public int Id { get; set; }
+    public int OrderId { get; set; }
+    public Order? Order { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public int? ChangedByUserId { get; set; }
+    public User? ChangedByUser { get; set; }
+    public string ChangedByName { get; set; } = string.Empty;
+    public string ChangedByRole { get; set; } = string.Empty;
+    public DateTime ChangedAt { get; set; } = DateTime.UtcNow;
+    public string? Comment { get; set; }
 }
 
 public class OrderItem
@@ -85,4 +111,7 @@ public class Promotion
     public string Title { get; set; } = string.Empty;
     public int DiscountPercent { get; set; }
     public bool IsActive { get; set; } = true;
+    public string Scope { get; set; } = PromotionScopes.None;
+    public string? Category { get; set; }
+    public int? MenuItemId { get; set; }
 }

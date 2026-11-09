@@ -24,6 +24,28 @@ npm run build
 npm run preview
 ```
 
+## Публичный HTTPS без белого IP
+
+Демонстрационный web и API опубликованы одним туннелем Tuna:
+
+- **https://lucky-crane-4648.a.tuna.free**
+- API: `/api/v1`, Swagger: `/swagger`.
+
+Сборка для такого режима использует относительный адрес API:
+
+```bash
+VITE_API_URL=/api/v1 npm run build
+VITE_API_URL=/api/v1 npm run preview -- --host 0.0.0.0 --port 8080
+```
+
+В `vite.config.ts` настроены `server.proxy`/`preview.proxy`: `/api`, `/hubs`
+(WebSocket SignalR) и `/swagger` уходят на `http://127.0.0.1:5080`, поэтому
+браузеру не нужен отдельный адрес API и нет CORS-проблем.
+
+При первом открытии бесплатный Tuna показывает страницу подтверждения —
+нажмите **«Посетить»**. Мобильное приложение это предупреждение не показывает.
+Полный запуск: `../scripts/start-public.sh`.
+
 ## Экраны
 
 - вход по паролю и по SMS-коду (демо-код `0000`);

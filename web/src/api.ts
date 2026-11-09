@@ -3,6 +3,9 @@ export type MenuItem = {
   name: string;
   description: string;
   price: number;
+  basePrice?: number;
+  discountPercent?: number;
+  promotionTitle?: string | null;
   calories: number;
   category: string;
   isInStopList: boolean;
@@ -38,11 +41,18 @@ export type User = {
 
 export type Tokens = { accessToken: string; refreshToken: string };
 
-const BASE =
+const RAW_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   "http://127.0.0.1:5080/api/v1";
 
-export const API_ORIGIN = BASE.replace(/\/api\/v1$/, "");
+// Относительный /api/v1 используется при публикации web и API за одним
+// HTTPS-туннелем: браузер обращается к тому же origin, а Vite proxy
+// перенаправляет /api и /hubs на локальный Kestrel.
+const BASE = RAW_BASE;
+
+export const API_ORIGIN = RAW_BASE.startsWith("http")
+  ? RAW_BASE.replace(/\/api\/v1$/, "")
+  : window.location.origin;
 
 const TOKENS_KEY = "ff_tokens";
 const USER_KEY = "ff_user";

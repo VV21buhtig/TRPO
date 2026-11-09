@@ -12,8 +12,8 @@ real-time через SignalR.
 | --- | --- | --- | --- |
 | Backend | ASP.NET Core (.NET 10), EF Core, SQLite/PostgreSQL, JWT, SignalR | `backend/` | единый REST API, бизнес-логика, real-time |
 | Web | React 19 + TypeScript + Vite | `web/` | клиентский SPA: меню, корзина, оплата, история |
-| Desktop | Electron + TypeScript | `desktop/` | рабочее место оператора: доска заказов, стоп-лист |
-| Mobile | Flutter (Dart) → Android | `mobile/` | мобильный клиент: те же сценарии; проверен на планшете Android 16 |
+| Desktop | Electron + TypeScript | `desktop/` | рабочее место оператора и менеджера: доска заказов, стоп-лист, отчёты, журнал действий, акции, сотрудники |
+| Mobile | Flutter (Dart) → Android | `mobile/` | мобильный клиент: те же сценарии; проверен на Google Pixel 7 (Android 16) |
 | Infra | Docker Compose, Nginx, PostgreSQL 16, Redis 7 | `infra/` | развёртывание комплекса |
 | CI | GitHub Actions | `.github/workflows/ci.yml` | сборка, анализ и smoke-тесты всех компонентов |
 
@@ -25,6 +25,7 @@ FastFood projects/
 ├── mobile/                  # Flutter-приложение клиента
 ├── infra/                   # docker-compose, nginx, .env.example
 ├── docs/screenshots/        # скриншоты работающих клиентов
+├── scripts/                 # start-public.sh / stop-public.sh (Tuna)
 ├── .github/workflows/ci.yml
 └── README.md
 ```
@@ -54,8 +55,9 @@ cd backend
 python3 smoke_test.py
 ```
 
-Скрипт проходит 23 проверки: вход, каталог, заказ, оплата, бонусы, смена
-статуса, стоп-лист, разграничение доступа, SMS-вход, отчёты администратора.
+Скрипт проходит 36+ проверок: вход, каталог, заказ, оплата, бонусы, смена
+статуса, стоп-лист, разграничение доступа, SMS-вход, отчёты администратора,
+создание/блокировка сотрудника, изменение акции и аудит отмены.
 
 ### 2. Web
 
@@ -68,7 +70,7 @@ npm run dev
 Откройте `http://127.0.0.1:5173`. Адрес API по умолчанию —
 `http://127.0.0.1:5080/api/v1`; переопределяется переменной `VITE_API_URL`.
 
-### 3. Desktop (оператор)
+### 3. Desktop (оператор и менеджер)
 
 ```bash
 cd desktop
@@ -76,8 +78,9 @@ npm install
 npm start
 ```
 
-Откроется рабочее место оператора. Горячие клавиши: `F1` — справка,
-`F5` — обновить, `Esc` — закрыть справку.
+Откроется рабочее место оператора; для менеджера доступна вкладка
+**«Управление»**. Горячие клавиши: `F1` — справка, `F5` — обновить,
+`Esc` — закрыть диалог.
 
 ### 4. Mobile
 
@@ -88,8 +91,43 @@ flutter pub get
 flutter run --dart-define=API_BASE=http://10.0.2.2:5080/api/v1
 ```
 
-Подробности (разрешения Android, адрес для планшета, сборка APK) —
+Подробности (разрешения Android, адрес для телефона/планшета, сборка APK) —
 в `mobile/README.md`.
+
+### 5. Публичный доступ без белого IP
+
+Для демонстрации используется постоянный HTTPS-туннель **Tuna** (российский
+сервис, данные не уходят в зарубежный облачный прокси). Один туннель отдаёт
+и web, и API: Vite preview проксирует `/api`, `/hubs` и `/swagger` на
+локальный Kestrel.
+
+- Web: `https://lucky-crane-4648.a.tuna.free`
+- API: `https://lucky-crane-4648.a.tuna.free/api/v1`
+- Swagger: `https://lucky-crane-4648.a.tuna.free/swagger`
+- health-check: `https://lucky-crane-4648.a.tuna.free/api/v1/health`
+
+Запуск всего комплекса одной командой:
+
+```bash
+cd "FastFood projects"
+./scripts/start-public.sh
+```
+
+Остановка:
+
+```bash
+./scripts/stop-public.sh
+```
+
+Скрипт поднимает API на `5080`, web preview на `8080` и туннель
+`tuna http 8080 --subdomain=lucky-crane-4648`. Tuna CLI должен быть
+установлен и авторизован (`tuna login`); инструкция — в
+`scripts/start-public.sh`.
+
+При первом открытии web в браузере бесплатный Tuna показывает страницу
+подтверждения — нажмите **«Посетить»**. Мобильное приложение это
+предупреждение не показывает. Для production нужен собственный домен/VPS
+или платный тариф без предупреждения.
 
 ## Демо-доступ
 
@@ -97,9 +135,30 @@ flutter run --dart-define=API_BASE=http://10.0.2.2:5080/api/v1
 | --- | --- | --- | --- |
 | Клиент | `+79991234567` | `12345` | web, mobile |
 | Оператор | `+79990000001` | `12345` | desktop |
-| Администратор | `+79990000002` | `12345` | API/Swagger |
+| Администратор (менеджер) | `+79990000002` | `12345` | desktop, Swagger |
 
 SMS-вход в демо-режиме: код `0000`.
+
+## Роль менеджера
+
+Менеджер — не «второй оператор»: в desktop-приложении ему доступна отдельная
+вкладка **«Управление»**.
+
+- **Отчёты и выручка** — оплаченные заказы, средний чек, выполненные и
+  отменённые заказы, топ блюд за 30 дней.
+- **Журнал действий** — кто и когда принял, приготовил, выдал или отменил
+  заказ; в журнале видны ID, ФИО и роль сотрудника, а также причина отмены.
+- **Сотрудники** — список с ID, ФИО, телефоном и статусом доступа; можно
+  добавить оператора или менеджера и заблокировать/разблокировать доступ.
+  Физического удаления нет: учётная запись остаётся в истории, но не может
+  войти в систему.
+- **Акции** — создание, изменение названия/скидки, привязка ко всем блюдам,
+  категории или конкретному блюду, включение/выключение без удаления записи.
+  Для привязанной акции сервер сам уменьшает цену в меню и при создании
+  заказа, поэтому скидка действует одинаково во всех клиентах.
+
+Заблокированный сотрудник теряет доступ сразу, даже если его JWT ещё не
+истёк: сервер проверяет признак `IsActive` при каждом запросе.
 
 ## Скриншоты
 
@@ -111,18 +170,52 @@ SMS-вход в демо-режиме: код `0000`.
 | --- | --- |
 | ![Доска](docs/screenshots/desktop-board.png) | ![Стоп-лист](docs/screenshots/desktop-stoplist.png) |
 
-| Web — статус заказа | Мобильная вёрстка web |
+| Desktop — отчёты и журнал менеджера | Desktop — сотрудники и акции |
 | --- | --- |
-| ![Статус](docs/screenshots/web-success.png) | ![Мобильная вёрстка](docs/screenshots/web-mobile.png) |
+| ![Управление](docs/screenshots/desktop-admin.png) | ![Сотрудники](docs/screenshots/desktop-admin-staff.png) |
 
-| Mobile — меню (планшет) | Mobile — статус заказа |
+| Swagger UI | Web — статус заказа |
 | --- | --- |
-| ![Меню](docs/screenshots/mobile-tablet-menu.png) | ![Статус](docs/screenshots/mobile-tablet-status.png) |
+| ![Swagger](docs/screenshots/swagger-overview.png) | ![Статус](docs/screenshots/web-success.png) |
+
+| Мобильная вёрстка web | Mobile — меню (Pixel 7) |
+| --- | --- |
+| ![Мобильная вёрстка](docs/screenshots/web-mobile.png) | ![Меню](docs/screenshots/mobile-pixel7-menu.png) |
+
+| Mobile — корзина (Pixel 7) | Mobile — оформление (Pixel 7) |
+| --- | --- |
+| ![Корзина](docs/screenshots/mobile-pixel7-cart.png) | ![Оформление](docs/screenshots/mobile-pixel7-checkout.png) |
+
+| Mobile — заказ оформлен (Pixel 7) | Mobile — статус обновился (Pixel 7) |
+| --- | --- |
+| ![Заказ](docs/screenshots/mobile-pixel7-order.png) | ![Статус](docs/screenshots/mobile-pixel7-status.png) |
+
+Старые скриншоты планшета остаются в `docs/screenshots/mobile-tablet-*.png`
+как история проверки на Android-планшете.
 
 ## REST API
 
+![Swagger UI](docs/screenshots/swagger-overview.png)
+
 Базовый префикс — `/api/v1`, формат — JSON. Защищённые методы требуют
 заголовок `Authorization: Bearer <accessToken>`.
+
+Все три клиента работают с одним контрактом: web, desktop и mobile не имеют
+собственных «серверных» копий данных. Контракт описан в Swagger
+(`/swagger`) и в JSON-схеме OpenAPI.
+
+**Авторизация в Swagger:**
+
+1. Выполните `POST /api/v1/auth/login` с телефоном и паролем демо-пользователя.
+2. Скопируйте `accessToken` из ответа.
+3. Нажмите **Authorize**, вставьте токен и подтвердите.
+4. Закрытые методы станут доступны с учётом роли (`Operator`/`Administrator`).
+
+```bash
+curl -X POST http://127.0.0.1:5080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+79990000002","password":"12345"}'
+```
 
 | Метод | Путь | Доступ | Назначение |
 | --- | --- | --- | --- |
@@ -146,13 +239,25 @@ SMS-вход в демо-режиме: код `0000`.
 | GET | `/users/me` | авторизованные | профиль |
 | PATCH | `/users/me` | авторизованные | изменение имени |
 | GET | `/users/me/orders` | Customer | история заказов |
-| POST | `/admin/promotions` | Admin | создание акции |
-| GET | `/admin/promotions` | Admin | список акций |
-| GET | `/admin/reports/sales` | Admin | отчёт по продажам |
+| POST | `/admin/promotions` | Administrator | создание акции |
+| GET | `/admin/promotions` | Administrator | список акций |
+| PATCH | `/admin/promotions/{id}` | Administrator | изменение/выключение акции |
+| GET | `/admin/staff` | Administrator | список сотрудников и их доступ |
+| POST | `/admin/staff` | Administrator | создание оператора/менеджера |
+| PATCH | `/admin/staff/{id}/active` | Administrator | блокировка/разблокировка |
+| GET | `/admin/reports/sales` | Administrator | выручка, средний чек, топ блюд, активность сотрудников |
+
+Каждый заказ содержит массив `statusHistory`: статус, время, автор (ID, ФИО,
+роль) и комментарий/причина отмены. На его основе менеджер видит, кто принял,
+выдал или отменил заказ. Отмена доступна оператору и менеджеру; физического
+удаления заказов нет — сохраняется полный аудит.
 
 Real-time хаб: `/hubs/orders`, события `OrderCreated`, `OrderStatusChanged`,
 `StopListChanged`. Клиент-оператор вызывает `JoinOperators`, клиент заказа —
 `JoinOrder(orderNumber)`.
+
+При блокировке сотрудника сервер отклоняет его действующий JWT с кодом `401`,
+поэтому доступ прекращается сразу, а не через 15 минут.
 
 ## Развёртывание (Docker)
 
@@ -187,6 +292,7 @@ docker compose up --build
 - **Модульный монолит**: единый процесс API с выделенными модулями
   (аутентификация, каталог, заказы, платежи, лояльность, администрирование).
 - **Единый контракт**: DTO и коды ошибок одинаковы для web, desktop и mobile.
-- **Безопасность**: JWT (access + refresh), роли Customer / Operator / Admin,
-  проверка владельца заказа, ограничение прав на стоп-лист и отчёты.
+- **Безопасность**: JWT (access + refresh), роли Customer / Operator /
+  Administrator, проверка владельца заказа, ограничение прав на стоп-лист,
+  акции, сотрудников и отчёты; аудит действий и блокировка без удаления.
 - **Real-time**: SignalR-группы операторов и конкретного заказа.

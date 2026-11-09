@@ -164,15 +164,40 @@ class _MenuScreenState extends State<MenuScreen> {
                 '${item.calories} ккал',
                 style: const TextStyle(fontSize: 12.5, color: mutedInk),
               ),
+              if (item.discountPercent > 0) ...[
+                const SizedBox(height: 5),
+                Text(
+                  '${item.promotionTitle ?? "Акция"} · −${item.discountPercent}%',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFC34B15),
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
               Row(
                 children: [
-                  Text(
-                    money(item.price),
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        money(item.price),
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (item.discountPercent > 0)
+                        Text(
+                          money(item.basePrice),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: mutedInk,
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                    ],
                   ),
                   const Spacer(),
                   FilledButton(
@@ -438,16 +463,43 @@ class _MenuScreenState extends State<MenuScreen> {
                 '${item.calories} ккал',
                 style: const TextStyle(fontSize: 11, color: mutedInk),
               ),
+              if (item.discountPercent > 0) ...[
+                const SizedBox(height: 2),
+                Text(
+                  '${item.promotionTitle ?? "Акция"} · −${item.discountPercent}%',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFC34B15),
+                  ),
+                ),
+              ],
               const Spacer(),
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      money(item.price),
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          money(item.price),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (item.discountPercent > 0)
+                          Text(
+                            money(item.basePrice),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: mutedInk,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   SizedBox(

@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<OrderStatusHistory> OrderStatusHistories => Set<OrderStatusHistory>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Promotion> Promotions => Set<Promotion>();
 
@@ -27,7 +28,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithOne(p => p.Order!)
             .HasForeignKey<Payment>(p => p.OrderId);
 
+        b.Entity<Order>()
+            .HasMany(o => o.StatusHistory)
+            .WithOne(h => h.Order!)
+            .HasForeignKey(h => h.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<OrderStatusHistory>()
+            .HasOne(h => h.ChangedByUser)
+            .WithMany()
+            .HasForeignKey(h => h.ChangedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         b.Entity<Order>().HasIndex(o => o.CreatedAt);
+        b.Entity<OrderStatusHistory>().HasIndex(h => new { h.OrderId, h.ChangedAt });
 
         // SQLite не хранит decimal нативно — используем double на уровне хранилища.
         b.Entity<MenuItem>().Property(m => m.Price).HasConversion<double>();

@@ -4,7 +4,7 @@ import { HubConnection, HubConnectionBuilder } from "@microsoft/signalr";
 /*  Типы, совпадающие с контрактами REST API                           */
 /* ------------------------------------------------------------------ */
 
-type Role = "Customer" | "Operator" | "Admin";
+type Role = "Customer" | "Operator" | "Administrator";
 
 type User = {
   id: number;
@@ -19,6 +19,9 @@ type MenuItem = {
   name: string;
   description: string;
   price: number;
+  basePrice?: number;
+  discountPercent?: number;
+  promotionTitle?: string | null;
   calories: number;
   category: string;
   isInStopList: boolean;
@@ -31,6 +34,13 @@ type OrderLine = {
   price: number;
 };
 
+type StatusHistoryEvent = {
+  status: string;
+  changedAt: string;
+  changedBy: { id: number | null; name: string; role: string };
+  comment: string | null;
+};
+
 type Order = {
   id: number;
   number: string;
@@ -41,7 +51,48 @@ type Order = {
   createdAt: string;
   customer: { id: number; name: string; phone: string } | null;
   items: OrderLine[];
+  statusHistory: StatusHistoryEvent[];
   payment: { method: string; status: string } | null;
+};
+
+type SalesReport = {
+  from: string;
+  to: string;
+  ordersCount: number;
+  paidCount: number;
+  completedCount: number;
+  cancelledCount: number;
+  cancelledAmount: number;
+  revenue: number;
+  averageCheck: number;
+  statusCounts: Record<string, number>;
+  operatorStats: Array<{
+    id: number | null;
+    name: string;
+    role: string;
+    actions: number;
+    lastAt: string;
+  }>;
+  topItems: Array<{ name: string; quantity: number; revenue: number }>;
+};
+
+type Promotion = {
+  id: number;
+  title: string;
+  discountPercent: number;
+  isActive: boolean;
+  scope: "None" | "All" | "Category" | "MenuItem";
+  category: string | null;
+  menuItemId: number | null;
+};
+
+type Staff = {
+  id: number;
+  name: string;
+  phone: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
 };
 
 type LoginResponse = {
@@ -64,6 +115,7 @@ declare global {
       close: () => void;
       version: () => Promise<string>;
       platform: string;
+      apiUrl: string | null;
     };
   }
 }
@@ -77,7 +129,9 @@ const REFRESH_KEY = "ff_desktop_refresh";
 const USER_KEY = "ff_desktop_user";
 
 const API = (
-  localStorage.getItem("ff_desktop_api") ?? "http://127.0.0.1:5080/api/v1"
+  window.desktop?.apiUrl ??
+  localStorage.getItem("ff_desktop_api") ??
+  "http://127.0.0.1:5080/api/v1"
 ).replace(/\/+$/, "");
 const HUB_URL = API.replace(/\/api\/v1$/, "") + "/hubs/orders";
 
@@ -126,10 +180,14 @@ const state = {
   user: readUser(),
   orders: [] as Order[],
   menu: [] as MenuItem[],
-  view: "orders" as "orders" | "stoplist",
+  view: "orders" as "orders" | "stoplist" | "admin",
   search: "",
   busyOrders: new Set<number>(),
   busyMenu: new Set<number>(),
+  report: null as SalesReport | null,
+  promotions: [] as Promotion[],
+  staff: [] as Staff[],
+  editingPromotionId: null as number | null,
 };
 
 const root = document.getElementById("root");
@@ -292,14 +350,15 @@ function persist(): void {
 /* ------------------------------------------------------------------ */
 
 function titlebar(): string {
+  const staff = state.user?.role === "Administrator" ? "менеджер" : "оператор";
   return `
     <div class="titlebar">
       <div class="brand">
         <span class="brand-mark">О</span>
         <span class="brand-text">Онлайн-заказ</span>
-        <span class="brand-sub">оператор</span>
+        <span class="brand-sub">${staff}</span>
       </div>
-      <div class="titlebar-caption">Рабочее место оператора</div>
+      <div class="titlebar-caption">Рабочее место: ${staff}</div>
       <div class="window-controls">
         <button data-win="min" title="Свернуть">—</button>
         <button data-win="max" title="Развернуть">▢</button>
@@ -316,7 +375,8 @@ function shell(): string {
     .slice(0, 2)
     .join("")
     .toUpperCase();
-  const role = user?.role === "Admin" ? "Администратор" : "Оператор";
+  const role = user?.role === "Administrator" ? "Менеджер" : "Оператор";
+  const isAdmin = user?.role === "Administrator";
 
   return `
     ${titlebar()}
@@ -336,6 +396,13 @@ function shell(): string {
           <button class="nav-item" data-view="stoplist">
             <span>⛔</span> Стоп-лист
           </button>
+          ${
+            isAdmin
+              ? `<button class="nav-item" data-view="admin">
+                  <span>📊</span> Управление
+                </button>`
+              : ""
+          }
         </nav>
         <div class="sidebar-footer">
           <div class="keyhint">F1 — горячие клавиши<br />F5 — обновить данные</div>
@@ -363,6 +430,7 @@ function shell(): string {
         <section class="stats" id="stats"></section>
         <section class="board" id="board"></section>
         <section class="stoplist hidden" id="stoplist"></section>
+        <section class="admin hidden" id="admin"></section>
       </main>
     </div>
 
@@ -489,7 +557,7 @@ function startApp(): void {
   void connectRealtime();
 }
 
-function switchView(view: "orders" | "stoplist"): void {
+function switchView(view: "orders" | "stoplist" | "admin"): void {
   state.view = view;
 
   document.querySelectorAll<HTMLElement>("[data-view]").forEach((button) => {
@@ -499,16 +567,21 @@ function switchView(view: "orders" | "stoplist"): void {
   document.getElementById("board")?.classList.toggle("hidden", view !== "orders");
   document.getElementById("stats")?.classList.toggle("hidden", view !== "orders");
   document.getElementById("stoplist")?.classList.toggle("hidden", view !== "stoplist");
+  document.getElementById("admin")?.classList.toggle("hidden", view !== "admin");
   document.getElementById("search-box")?.classList.toggle("hidden", view !== "orders");
 
+  const titles: Record<typeof view, [string, string]> = {
+    orders: ["Заказы", "Все заказы в реальном времени"],
+    stoplist: ["Стоп-лист", "Управление доступностью блюд"],
+    admin: ["Управление", "Отчёты, сотрудники и журнал действий"],
+  };
   const title = document.getElementById("page-title");
   const subtitle = document.getElementById("page-subtitle");
-  if (title) title.textContent = view === "orders" ? "Заказы" : "Стоп-лист";
-  if (subtitle) {
-    subtitle.textContent =
-      view === "orders"
-        ? "Все заказы в реальном времени"
-        : "Управление доступностью блюд";
+  if (title) title.textContent = titles[view][0];
+  if (subtitle) subtitle.textContent = titles[view][1];
+
+  if (view === "admin") {
+    void loadAdmin();
   }
 }
 
@@ -521,6 +594,7 @@ async function loadOrders(): Promise<void> {
   renderBoard();
   renderStats();
   updateBadge();
+  if (state.view === "admin") renderAdmin();
 }
 
 async function loadMenu(): Promise<void> {
@@ -528,10 +602,350 @@ async function loadMenu(): Promise<void> {
   renderStopList();
 }
 
+async function loadAdmin(): Promise<void> {
+  if (state.user?.role !== "Administrator") return;
+  try {
+    if (state.menu.length === 0) {
+      await loadMenu();
+    }
+    const [report, promotions, staff] = await Promise.all([
+      request<SalesReport>("/admin/reports/sales"),
+      request<Promotion[]>("/admin/promotions"),
+      request<Staff[]>("/admin/staff"),
+    ]);
+    state.report = report;
+    state.promotions = promotions;
+    state.staff = staff;
+    renderAdmin();
+  } catch (error) {
+    const message = document.getElementById("admin");
+    if (message) {
+      message.innerHTML = `<div class="column-empty">Не удалось загрузить отчёт: ${esc(
+        error instanceof Error ? error.message : "ошибка",
+      )}</div>`;
+    }
+  }
+}
+
+function roleLabel(role: string): string {
+  if (role === "Administrator") return "Менеджер";
+  if (role === "Operator") return "Оператор";
+  if (role === "Customer") return "Клиент";
+  return role;
+}
+
+function dateTime(iso: string): string {
+  return new Date(iso).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function promotionTarget(promo: Promotion): string {
+  if (promo.scope === "All") return "все блюда";
+  if (promo.scope === "Category") return `категория «${promo.category ?? "—"}»`;
+  if (promo.scope === "MenuItem") {
+    const item = state.menu.find((menuItem) => menuItem.id === promo.menuItemId);
+    return item ? `блюдо «${item.name}»` : `блюдо #${promo.menuItemId ?? "—"}`;
+  }
+  return "без привязки";
+}
+
+function renderAdmin(): void {
+  const container = document.getElementById("admin");
+  if (!container) return;
+  const report = state.report;
+  if (!report) {
+    container.innerHTML = `<div class="column-empty">Загрузка отчёта…</div>`;
+    return;
+  }
+
+  const audit = state.orders
+    .flatMap((order) =>
+      order.statusHistory.map((event) => ({ ...event, orderNumber: order.number })),
+    )
+    .sort((a, b) => b.changedAt.localeCompare(a.changedAt))
+    .slice(0, 30);
+
+  const topItems = report.topItems.length
+    ? report.topItems
+        .map(
+          (item) => `<tr>
+            <td>${esc(item.name)}</td>
+            <td>${item.quantity}</td>
+            <td>${money(item.revenue)}</td>
+          </tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="3" class="muted">Пока нет продаж</td></tr>`;
+
+  const operators = report.operatorStats.length
+    ? report.operatorStats
+        .map(
+          (item) => `<tr>
+            <td class="actor-id">${item.id ? `#${item.id}` : "—"}</td>
+            <td><strong>${esc(item.name)}</strong><span class="role-note">${roleLabel(item.role)}</span></td>
+            <td>${item.actions}</td>
+            <td>${dateTime(item.lastAt)}</td>
+          </tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="4" class="muted">Действий сотрудников пока нет</td></tr>`;
+
+  const events = audit.length
+    ? audit
+        .map(
+          (event) => `<tr>
+            <td><strong>${esc(event.orderNumber)}</strong></td>
+            <td><span class="status ${esc(event.status)}">${esc(STATUS_LABELS[event.status] ?? event.status)}</span></td>
+            <td>
+              ${event.changedBy.id ? `<span class="actor-id">#${event.changedBy.id}</span> ` : ""}
+              ${esc(event.changedBy.name)}
+              <span class="role-note">${roleLabel(event.changedBy.role)}</span>
+            </td>
+            <td>${dateTime(event.changedAt)}</td>
+            <td>${esc(event.comment ?? "—")}</td>
+          </tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="5" class="muted">Журнал пока пуст</td></tr>`;
+
+  const promoRows = state.promotions.length
+    ? state.promotions
+        .map(
+          (promo) => `<li class="promo-row ${promo.isActive ? "" : "promo-off"}">
+            <div class="promo-title">
+              <span>${esc(promo.title)}</span>
+              <small>−${promo.discountPercent}% · ${esc(promotionTarget(promo))} · ${promo.isActive ? "активна" : "выключена"}</small>
+            </div>
+            <div class="promo-actions">
+              <button type="button" class="btn mini ghost" data-action="promo-edit" data-id="${promo.id}">Изменить</button>
+              <button type="button" class="btn mini ${promo.isActive ? "ghost-danger" : "ghost"}" data-action="promo-toggle" data-id="${promo.id}" data-active="${!promo.isActive}">${promo.isActive ? "Выключить" : "Включить"}</button>
+            </div>
+          </li>`,
+        )
+        .join("")
+    : `<li class="muted">Акций пока нет</li>`;
+
+  const staffRows = state.staff.length
+    ? state.staff
+        .map(
+          (person) => `<tr class="${person.isActive ? "" : "staff-off"}">
+            <td class="actor-id">#${person.id}</td>
+            <td><strong>${esc(person.name)}</strong><span class="role-note">${roleLabel(person.role)}</span></td>
+            <td>${esc(person.phone)}</td>
+            <td><span class="staff-state ${person.isActive ? "on" : "off"}">${person.isActive ? "Активен" : "Заблокирован"}</span></td>
+            <td>
+              <button type="button" class="btn mini ${person.isActive ? "ghost-danger" : "ghost"}" data-action="staff-toggle" data-id="${person.id}" data-active="${!person.isActive}">
+                ${person.isActive ? "Заблокировать" : "Разблокировать"}
+              </button>
+            </td>
+          </tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="5" class="muted">Сотрудников пока нет</td></tr>`;
+
+  const editingPromo = state.promotions.find((promo) => promo.id === state.editingPromotionId);
+  const categories = [...new Set(state.menu.map((item) => item.category))].sort();
+  const promoScope = editingPromo?.scope ?? "None";
+  const promoCategory = editingPromo?.category ?? categories[0] ?? "";
+  const promoMenuItem = editingPromo?.menuItemId ?? state.menu[0]?.id ?? "";
+
+  container.innerHTML = `
+    <div class="admin-kpis">
+      <div class="admin-kpi"><span>Выручка</span><strong>${money(report.revenue)}</strong><small>${report.paidCount} оплаченных</small></div>
+      <div class="admin-kpi"><span>Средний чек</span><strong>${money(report.averageCheck)}</strong><small>за ${report.ordersCount} заказов</small></div>
+      <div class="admin-kpi"><span>Выполнено</span><strong>${report.completedCount}</strong><small>за период</small></div>
+      <div class="admin-kpi danger"><span>Отменено</span><strong>${report.cancelledCount}</strong><small>${money(report.cancelledAmount)}</small></div>
+    </div>
+
+    <div class="admin-grid">
+      <section class="admin-card">
+        <div class="admin-card-head"><h2>Топ блюд</h2><span>за 30 дней</span></div>
+        <table class="admin-table">
+          <thead><tr><th>Блюдо</th><th>Штук</th><th>Сумма</th></tr></thead>
+          <tbody>${topItems}</tbody>
+        </table>
+      </section>
+
+      <section class="admin-card">
+        <div class="admin-card-head"><h2>Активность сотрудников</h2><span>кто и сколько действий сделал</span></div>
+        <table class="admin-table">
+          <thead><tr><th>ID</th><th>Сотрудник</th><th>Действий</th><th>Последнее</th></tr></thead>
+          <tbody>${operators}</tbody>
+        </table>
+      </section>
+
+      <section class="admin-card admin-card-wide">
+        <div class="admin-card-head"><h2>Журнал действий</h2><span>кто принял, выдал и отменил</span></div>
+        <div class="audit-scroll">
+          <table class="admin-table audit-table">
+            <thead><tr><th>Заказ</th><th>Статус</th><th>Автор</th><th>Когда</th><th>Комментарий</th></tr></thead>
+            <tbody>${events}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="admin-card admin-card-wide">
+        <div class="admin-card-head"><h2>Сотрудники</h2><span>ID, ФИО и доступ к системе</span></div>
+        <div class="staff-layout">
+          <table class="admin-table staff-table">
+            <thead><tr><th>ID</th><th>ФИО</th><th>Телефон</th><th>Доступ</th><th></th></tr></thead>
+            <tbody>${staffRows}</tbody>
+          </table>
+          <form class="staff-form" id="staff-form">
+            <h3>Добавить сотрудника</h3>
+            <input id="staff-name" placeholder="ФИО" maxlength="80" />
+            <input id="staff-phone" placeholder="+7 999 000-00-00" autocomplete="off" />
+            <input id="staff-password" type="password" value="12345" placeholder="Пароль" autocomplete="new-password" />
+            <select id="staff-role">
+              <option value="Operator">Оператор</option>
+              <option value="Administrator">Менеджер</option>
+            </select>
+            <button type="button" class="btn primary" data-action="staff-create">Создать доступ</button>
+            <small>Физическое удаление не выполняется. Заблокированного сотрудника можно вернуть кнопкой «Разблокировать» — доступ восстановится сразу.</small>
+          </form>
+        </div>
+      </section>
+
+      <section class="admin-card admin-card-wide">
+        <div class="admin-card-head"><h2>Акции</h2><span>${state.promotions.length} в справочнике</span></div>
+        <div class="promo-layout">
+          <ul class="promo-list">${promoRows}</ul>
+          <form class="promo-form" id="promo-form">
+            <h3>${editingPromo ? `Акция #${editingPromo.id}` : "Новая акция"}</h3>
+            <input id="promo-title" placeholder="Название акции" maxlength="80" value="${esc(editingPromo?.title ?? "")}" />
+            <div class="form-inline">
+              <input id="promo-percent" type="number" min="1" max="90" placeholder="Скидка, %" value="${editingPromo?.discountPercent ?? ""}" />
+              <button type="button" class="btn primary" data-action="promo-save">${editingPromo ? "Сохранить" : "Добавить"}</button>
+              ${editingPromo ? `<button type="button" class="btn ghost" data-action="promo-cancel">Отмена</button>` : ""}
+            </div>
+            <label class="form-field">К чему применить
+              <select id="promo-scope">
+                <option value="None" ${promoScope === "None" ? "selected" : ""}>Без привязки (информационная)</option>
+                <option value="All" ${promoScope === "All" ? "selected" : ""}>Все блюда</option>
+                <option value="Category" ${promoScope === "Category" ? "selected" : ""}>Категория</option>
+                <option value="MenuItem" ${promoScope === "MenuItem" ? "selected" : ""}>Одно блюдо</option>
+              </select>
+            </label>
+            <label class="form-field ${promoScope === "Category" ? "" : "hidden"}" id="promo-category-wrap">Категория
+              <select id="promo-category">
+                ${categories.map((category) => `<option value="${esc(category)}" ${category === promoCategory ? "selected" : ""}>${esc(category)}</option>`).join("")}
+              </select>
+            </label>
+            <label class="form-field ${promoScope === "MenuItem" ? "" : "hidden"}" id="promo-item-wrap">Блюдо
+              <select id="promo-item">
+                ${state.menu.map((item) => `<option value="${item.id}" ${item.id === promoMenuItem ? "selected" : ""}>${esc(item.name)} — ${money(item.price)}</option>`).join("")}
+              </select>
+            </label>
+            <small>Без привязки акция остаётся справочной и не меняет цены.</small>
+          </form>
+        </div>
+      </section>
+    </div>`;
+
+  const scopeSelect = document.getElementById("promo-scope") as HTMLSelectElement | null;
+  const categoryWrap = document.getElementById("promo-category-wrap");
+  const itemWrap = document.getElementById("promo-item-wrap");
+  const syncScopeFields = (): void => {
+    categoryWrap?.classList.toggle("hidden", scopeSelect?.value !== "Category");
+    itemWrap?.classList.toggle("hidden", scopeSelect?.value !== "MenuItem");
+  };
+  scopeSelect?.addEventListener("change", syncScopeFields);
+  syncScopeFields();
+}
+
+async function savePromotion(): Promise<void> {
+  const title = document.querySelector<HTMLInputElement>("#promo-title")?.value.trim() ?? "";
+  const discount = Number(document.querySelector<HTMLInputElement>("#promo-percent")?.value ?? 0);
+  const scope = document.querySelector<HTMLSelectElement>("#promo-scope")?.value ?? "None";
+  const category = document.querySelector<HTMLSelectElement>("#promo-category")?.value ?? null;
+  const menuItemId = Number(document.querySelector<HTMLSelectElement>("#promo-item")?.value ?? 0);
+  if (!title || !Number.isFinite(discount) || discount < 1 || discount > 90) {
+    toast("Укажите название и скидку 1–90%", true);
+    return;
+  }
+  const body = {
+    title,
+    discountPercent: discount,
+    scope,
+    category: scope === "Category" ? category : null,
+    menuItemId: scope === "MenuItem" && menuItemId > 0 ? menuItemId : null,
+  };
+  try {
+    if (state.editingPromotionId) {
+      await request<Promotion>(`/admin/promotions/${state.editingPromotionId}`, {
+        method: "PATCH",
+        body,
+      });
+      toast("Акция обновлена");
+    } else {
+      await request<Promotion>("/admin/promotions", {
+        method: "POST",
+        body,
+      });
+      toast("Акция добавлена");
+    }
+    state.editingPromotionId = null;
+    await loadAdmin();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "Не удалось сохранить акцию", true);
+  }
+}
+
+async function togglePromotion(id: number, active: boolean): Promise<void> {
+  try {
+    await request<Promotion>(`/admin/promotions/${id}`, {
+      method: "PATCH",
+      body: { isActive: active },
+    });
+    await loadAdmin();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "Не удалось изменить акцию", true);
+  }
+}
+
+async function createStaff(): Promise<void> {
+  const name = document.querySelector<HTMLInputElement>("#staff-name")?.value.trim() ?? "";
+  const phone = document.querySelector<HTMLInputElement>("#staff-phone")?.value.trim() ?? "";
+  const password = document.querySelector<HTMLInputElement>("#staff-password")?.value ?? "";
+  const role = document.querySelector<HTMLSelectElement>("#staff-role")?.value ?? "Operator";
+  if (!name || !phone || password.length < 5) {
+    toast("Укажите ФИО, телефон и пароль не короче 5 символов", true);
+    return;
+  }
+  try {
+    await request<Staff>("/admin/staff", {
+      method: "POST",
+      body: { name, phone, password, role },
+    });
+    toast("Сотрудник добавлен");
+    await loadAdmin();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "Не удалось добавить сотрудника", true);
+  }
+}
+
+async function toggleStaff(id: number, active: boolean): Promise<void> {
+  try {
+    await request<Staff>(`/admin/staff/${id}/active`, {
+      method: "PATCH",
+      body: { isActive: active },
+    });
+    toast(active ? "Доступ восстановлен" : "Доступ заблокирован");
+    await loadAdmin();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : "Не удалось изменить доступ", true);
+  }
+}
+
 async function refreshAll(): Promise<void> {
   if (!state.user) return;
   try {
     await Promise.all([loadOrders(), loadMenu()]);
+    if (state.view === "admin") await loadAdmin();
   } catch (error) {
     const status = (error as { status?: number }).status;
     if (status === 401) {
@@ -558,6 +972,14 @@ function orderCard(order: Order): string {
   const next = NEXT_STATUS[order.status];
   const cancellable = ["New", "Accepted", "Cooking"].includes(order.status);
   const search = `${order.number} ${order.customer?.name ?? ""} ${order.customer?.phone ?? ""}`.toLowerCase();
+  const history = order.statusHistory ?? [];
+  const creator = history.find((event) => event.status === "New") ?? history[0];
+  const lastEvent = history.at(-1);
+  const actorName = (event: StatusHistoryEvent): string =>
+    `${event.changedBy.id ? `#${event.changedBy.id} ` : ""}${event.changedBy.name}`;
+  const lastActor = lastEvent && lastEvent.status !== "New"
+    ? `${STATUS_LABELS[lastEvent.status] ?? lastEvent.status}: ${actorName(lastEvent)}`
+    : "";
 
   return `
     <article class="order-card status-${esc(order.status)}" data-id="${order.id}" data-search="${esc(search)}">
@@ -584,6 +1006,11 @@ function orderCard(order: Order): string {
           .join("")}
       </ul>
       ${order.comment ? `<div class="order-comment">💬 ${esc(order.comment)}</div>` : ""}
+      ${creator || lastActor ? `<div class="order-audit">
+        ${creator ? `<span>Оформил: ${esc(actorName(creator))}</span>` : ""}
+        ${lastActor ? `<span>${esc(lastActor)}</span>` : ""}
+        ${lastEvent?.comment ? `<span class="audit-comment">${esc(lastEvent.comment)}</span>` : ""}
+      </div>` : ""}
       <div class="order-total"><span>Итого</span><strong>${money(order.totalAmount)}</strong></div>
       <div class="order-actions">
         ${
@@ -699,7 +1126,7 @@ function updateBadge(): void {
 /*  Действия оператора                                                 */
 /* ------------------------------------------------------------------ */
 
-async function setStatus(id: number, status: string): Promise<void> {
+async function setStatus(id: number, status: string, comment?: string): Promise<void> {
   if (state.busyOrders.has(id)) return;
   state.busyOrders.add(id);
   renderBoard();
@@ -707,7 +1134,7 @@ async function setStatus(id: number, status: string): Promise<void> {
   try {
     const updated = await request<Order>(`/orders/${id}/status`, {
       method: "PATCH",
-      body: { status },
+      body: comment ? { status, comment } : { status },
     });
     upsertOrder(updated);
     renderBoard();
@@ -723,6 +1150,60 @@ async function setStatus(id: number, status: string): Promise<void> {
     state.busyOrders.delete(id);
     renderBoard();
   }
+}
+
+function askCancelReason(orderNumber: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "overlay";
+    overlay.id = "cancel-dialog";
+    overlay.innerHTML = `
+      <div class="help-card confirm-card">
+        <div class="help-head">
+          <h2>Отменить заказ ${esc(orderNumber)}?</h2>
+          <button class="icon-button" data-cancel-close title="Закрыть">✕</button>
+        </div>
+        <p>Заказ останется в истории. Отмена будет записана в журнал с вашим ID, ФИО и причиной.</p>
+        <textarea id="cancel-reason" maxlength="200" placeholder="Причина отмены (необязательно)"></textarea>
+        <div class="confirm-actions">
+          <button type="button" class="btn ghost" data-cancel-close>Не отменять</button>
+          <button type="button" class="btn danger" data-cancel-confirm>Отменить заказ</button>
+        </div>
+      </div>`;
+    document.body.append(overlay);
+
+    let finished = false;
+    const close = (value: string | null): void => {
+      if (finished) return;
+      finished = true;
+      document.removeEventListener("keydown", onKey);
+      overlay.remove();
+      resolve(value);
+    };
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") close(null);
+    };
+    const reason = overlay.querySelector<HTMLTextAreaElement>("#cancel-reason");
+
+    overlay.querySelectorAll<HTMLElement>("[data-cancel-close]").forEach((button) => {
+      button.addEventListener("click", () => close(null));
+    });
+    overlay.querySelector<HTMLElement>("[data-cancel-confirm]")?.addEventListener("click", () => {
+      close(reason?.value.trim() ?? "");
+    });
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close(null);
+    });
+    document.addEventListener("keydown", onKey);
+    reason?.focus();
+  });
+}
+
+async function cancelOrder(id: number): Promise<void> {
+  const order = state.orders.find((item) => item.id === id);
+  const reason = await askCancelReason(order?.number ?? `#${id}`);
+  if (reason === null) return;
+  await setStatus(id, "Cancelled", reason || undefined);
 }
 
 async function setStopList(id: number, inStopList: boolean): Promise<void> {
@@ -905,7 +1386,8 @@ document.addEventListener("click", (event) => {
 
   const viewButton = target.closest<HTMLElement>("[data-view]");
   if (viewButton) {
-    switchView(viewButton.dataset.view === "stoplist" ? "stoplist" : "orders");
+    const view = viewButton.dataset.view;
+    switchView(view === "stoplist" || view === "admin" ? view : "orders");
     return;
   }
 
@@ -916,6 +1398,35 @@ document.addEventListener("click", (event) => {
 
   if (target.closest("#refresh")) {
     void refreshAll();
+    return;
+  }
+
+  const adminAction = target.closest<HTMLElement>("[data-action]");
+  const adminKind = adminAction?.dataset.action;
+  if (adminKind === "promo-save") {
+    void savePromotion();
+    return;
+  }
+  if (adminKind === "staff-create") {
+    void createStaff();
+    return;
+  }
+  if (adminKind === "promo-cancel") {
+    state.editingPromotionId = null;
+    renderAdmin();
+    return;
+  }
+  if (adminKind === "promo-edit" || adminKind === "promo-toggle" || adminKind === "staff-toggle") {
+    const id = Number(adminAction?.dataset.id);
+    if (!Number.isFinite(id)) return;
+    if (adminKind === "promo-edit") {
+      state.editingPromotionId = id;
+      renderAdmin();
+    } else if (adminKind === "promo-toggle") {
+      void togglePromotion(id, adminAction?.dataset.active === "true");
+    } else {
+      void toggleStaff(id, adminAction?.dataset.active === "true");
+    }
     return;
   }
 
@@ -938,7 +1449,7 @@ document.addEventListener("click", (event) => {
   if (action.dataset.action === "advance") {
     void setStatus(id, action.dataset.next ?? "");
   } else if (action.dataset.action === "cancel") {
-    if (window.confirm("Отменить заказ?")) void setStatus(id, "Cancelled");
+    void cancelOrder(id);
   } else if (action.dataset.action === "stop") {
     void setStopList(id, action.dataset.flag === "true");
   }

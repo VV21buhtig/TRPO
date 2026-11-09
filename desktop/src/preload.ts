@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld("desktop", {
   close: () => ipcRenderer.send("window:close"),
   version: () => ipcRenderer.invoke("app:version") as Promise<string>,
   platform: process.platform,
+  apiUrl: process.env.FF_API_URL ?? null,
 });

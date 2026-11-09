@@ -511,6 +511,25 @@ img {
   font-size: 26px;
 }
 
+.price-old {
+  display: block;
+  margin-top: 2px;
+  color: #9aa1ac;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: line-through;
+}
+
+.promo-badge {
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #fff0e7;
+  color: #c34b15;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
 .skeleton {
   height: 286px;
   background: linear-gradient(100deg, #edeff2 30%, #f7f8fa 50%, #edeff2 70%);

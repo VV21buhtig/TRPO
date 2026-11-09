@@ -37,10 +37,12 @@ mobile/
 - Flutter 3.47+ (Dart 3.13+), Android SDK 36, JDK 17;
 - запущенный backend (см. `../backend/README.md`).
 
-Проверено на Flutter 3.47.9, Android 16 (arm64).
+Проверено на Flutter 3.47.9, Android 16 (arm64): Google Pixel 7 и
+OnePlus Pad 2 Pro.
 
-На OnePlus Pad 2 Pro проверены вход, меню, корзина, оформление заказа,
-оплата, экран статуса и автоматическое обновление статуса (опрос каждые 10 с).
+На Pixel 7 через публичный HTTPS-туннель проверены вход, меню, акция 20 %
+(цена 256 ₽ вместо 320 ₽), корзина, оформление, оплата, экран статуса и
+обновление статуса без `adb reverse`.
 
 ## Первый запуск
 
@@ -73,9 +75,22 @@ flutter pub get
 
 ### Адрес API
 
-По умолчанию используется `http://10.0.2.2:5080/api/v1` — это localhost
-компьютера с точки зрения Android-эмулятора. Для реального планшета укажите
-IP компьютера в локальной сети:
+Для демонстрации без белого IP используется постоянный HTTPS-туннель Tuna:
+
+```text
+https://lucky-crane-4648.a.tuna.free/api/v1
+```
+
+Сборка APK с этим адресом (адрес «зашит» в приложение, клиент его не
+настраивает):
+
+```bash
+flutter build apk --debug \
+  --dart-define=API_BASE=https://lucky-crane-4648.a.tuna.free/api/v1
+```
+
+Для локальной разработки можно использовать эмулятор
+(`http://10.0.2.2:5080/api/v1`) или IP компьютера в одной сети:
 
 ```bash
 flutter run --dart-define=API_BASE=http://192.168.1.50:5080/api/v1
@@ -91,25 +106,33 @@ dotnet run --urls http://0.0.0.0:5080
 ### Сборка APK
 
 ```bash
+# публичный HTTPS-вариант
+flutter build apk --debug \
+  --dart-define=API_BASE=https://lucky-crane-4648.a.tuna.free/api/v1
+
+# локальный вариант
 flutter build apk --release \
   --dart-define=API_BASE=http://192.168.1.50:5080/api/v1
 ```
 
-APK: `build/app/outputs/flutter-apk/app-release.apk`.
+APK: `build/app/outputs/flutter-apk/app-debug.apk` или
+`app-release.apk`.
 
-### Установка на подключённый планшет
+### Установка на подключённый телефон/планшет
 
 ```bash
 adb devices
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
+adb shell pm clear com.example.fastfood_mobile
 adb shell am start -n com.example.fastfood_mobile/.MainActivity
 ```
 
-Планшет и компьютер должны быть в одной сети, а API — слушать `0.0.0.0:5080`.
-Для проверки с планшета:
+Для публичного HTTPS-адреса `adb reverse` не нужен: телефон работает через
+мобильный интернет или любую Wi-Fi-сеть. Проверка health-check с телефона:
 
 ```bash
-adb shell curl -s http://192.168.1.50:5080/api/v1/health
+adb shell am start -a android.intent.action.VIEW \
+  -d https://lucky-crane-4648.a.tuna.free/api/v1/health
 ```
 
 ### Проверка без устройства
