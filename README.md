@@ -14,16 +14,16 @@ real-time через SignalR.
 | Web | React 19 + TypeScript + Vite | `web/` | клиентский SPA: меню, корзина, оплата, история |
 | Desktop | Electron + TypeScript | `desktop/` | рабочее место оператора и менеджера: доска заказов, стоп-лист, отчёты, журнал действий, акции, сотрудники |
 | Mobile | Flutter (Dart) → Android | `mobile/` | мобильный клиент: те же сценарии; проверен на Google Pixel 7 (Android 16) |
-| Infra | Docker Compose, Nginx, PostgreSQL 16, Redis 7 | `infra/` | развёртывание комплекса |
+| Infra | Tuna + Vite preview (демо); Docker Compose/Nginx/PostgreSQL — опционально | `infra/` | публикация без белого IP; production-профиль |
 | CI | GitHub Actions | `.github/workflows/ci.yml` | сборка, анализ и smoke-тесты всех компонентов |
 
 ```
 FastFood projects/
 ├── backend/                 # ASP.NET Core API + smoke_test.py
 ├── web/                     # React SPA
-├── desktop/                 # Electron-приложение оператора
+├── desktop/                 # Electron: оператор и менеджер
 ├── mobile/                  # Flutter-приложение клиента
-├── infra/                   # docker-compose, nginx, .env.example
+├── infra/                   # опционально: docker-compose, nginx, PostgreSQL
 ├── docs/screenshots/        # скриншоты работающих клиентов
 ├── scripts/                 # start-public.sh / stop-public.sh (Tuna)
 ├── .github/workflows/ci.yml
@@ -259,9 +259,11 @@ Real-time хаб: `/hubs/orders`, события `OrderCreated`, `OrderStatusCha
 При блокировке сотрудника сервер отклоняет его действующий JWT с кодом `401`,
 поэтому доступ прекращается сразу, а не через 15 минут.
 
-## Развёртывание (Docker)
+## Развёртывание (Docker, опционально)
 
 ```bash
+# В демонстрационном контуре Docker не используется.
+# Команды ниже — для production-профиля.
 cd infra
 cp .env.example .env      # задайте свои POSTGRES_PASSWORD и JWT_KEY
 docker compose up --build
@@ -271,8 +273,7 @@ docker compose up --build
 - API через Nginx: `http://localhost:8080/api/v1/health`
 - Swagger: `http://localhost:8080/swagger`
 
-В production-профиле API работает с PostgreSQL 16; Redis предусмотрен для
-кэша и фоновых задач. Схема БД создаётся автоматически при первом старте.
+В демонстрационном контуре используется SQLite; Docker, Nginx, PostgreSQL и Redis не запускаются. В production-профиле API работает с PostgreSQL 16; Redis предусмотрен как опция для кэша и фоновых задач. Схема БД создаётся автоматически при первом старте.
 
 ## CI/CD
 
