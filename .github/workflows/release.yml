@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Собрать и опубликовать релиз
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Установить зависимости desktop
+        working-directory: desktop
+        run: npm ci
+
+      - name: Собрать release APK
+        working-directory: mobile
+        run: |
+          flutter pub get
+          flutter build apk --release \
+            --dart-define=API_BASE=https://lucky-crane-4648.a.tuna.free/api/v1
+          ls -lh build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Собрать переносимые Windows/Linux релизы
+        run: ./scripts/build-releases.sh
+
+      - name: Опубликовать GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Онлайн-заказ ${{ github.ref_name }}
+          body_path: .github/release-notes.md
+          files: |
+            release/FastFood-Operator-*.zip
+            release/FastFood-Operator-*.tar.gz
+            release/FastFood-Operator-*.apk
+            release/SHA256SUMS.txt
+          fail_on_unmatched_files: true
