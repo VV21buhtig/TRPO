@@ -605,9 +605,9 @@ async function loadMenu(): Promise<void> {
 async function loadAdmin(): Promise<void> {
   if (state.user?.role !== "Administrator") return;
   try {
-    if (state.menu.length === 0) {
-      await loadMenu();
-    }
+    // Цены в форме акции и стоп-листе зависят от активных акций,
+    // поэтому обновляем меню при каждом открытии/обновлении «Управления».
+    await loadMenu();
     const [report, promotions, staff] = await Promise.all([
       request<SalesReport>("/admin/reports/sales"),
       request<Promotion[]>("/admin/promotions"),

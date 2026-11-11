@@ -28,3 +28,6 @@ mobile/web/
 .vscode/
 *.log
 .DS_Store
+
+# Локальные релизные артефакты
+release/
